@@ -12,6 +12,12 @@
 ' bWaitOnReturn = True: wscript blocks until the PowerShell loop exits, so the
 ' scheduled task stays in the Running state and its RestartCount safety net
 ' still relaunches the chain if the loop ever dies. Window stays hidden (0).
+' Arguments(0) = the .ps1 path; any further arguments are forwarded verbatim to the script
+' (e.g. -ShowWindowTitle for the NowPlaying Writer). Flags must be space-free or pre-quoted.
 Set sh = CreateObject("WScript.Shell")
 ps1 = WScript.Arguments(0)
-WScript.Quit sh.Run("powershell.exe -NoProfile -NoLogo -ExecutionPolicy Bypass -File """ & ps1 & """", 0, True)
+extra = ""
+For i = 1 To WScript.Arguments.Count - 1
+    extra = extra & " " & WScript.Arguments(i)
+Next
+WScript.Quit sh.Run("powershell.exe -NoProfile -NoLogo -ExecutionPolicy Bypass -File """ & ps1 & """" & extra, 0, True)
