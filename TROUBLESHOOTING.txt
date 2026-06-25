@@ -1,0 +1,13 @@
+If something doesn't light up, check in this order
+
+  # Windows: did the BeoPort get attached to WSL?
+  ! "/mnt/c/Program Files/usbipd-win/usbipd.exe" list      # want STATE = Attached
+
+  # WSL: is the service up and what does it see?
+  ! journalctl -u bsnowplaying -n 30 --no-pager            # look for ♪ track / ↻ re-armed / ⏯ key
+  Paste me whichever looks off and I'll zero in.
+
+  One genuine unknown that this test will settle: whether the media keys injected from the hidden Player Control task
+  actually reach Spotify. If audio + display work but the BS9000 buttons don't control playback, that's the one thing to
+  report back — I have a fallback (SendKeys/AppCommand) ready if needed. Good luck — reboot and tell me what the glass
+  does.

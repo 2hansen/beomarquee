@@ -1,0 +1,24 @@
+# Runtime-generated bridge files (recreated on every run; also leak current track)
+nowplaying.txt
+command.txt
+switch.txt
+*.pid
+
+# Python
+__pycache__/
+*.pyc
+
+# Reverse-engineering scaffolding + parked experiments (kept locally, not published)
+archive/
+
+# Proprietary Bang & Olufsen assets — DO NOT redistribute
+driver-backup/
+*.pdf
+
+# Raw protocol captures (large; include deliberately under research/ if you want them public)
+*.pcapng
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
