@@ -19,9 +19,14 @@ Every USB interrupt transfer (EP 0x01 OUT, EP 0x81 IN) carries fragments of a fr
   - other bytes (`f1 80 29 f6 e7 26 e3 e5 ea …`) = **BeoPort device-control opcodes** (configure/enable
     the adapter; not ML telegrams).
 - TX telegram trailer: after the ML telegram, 2 bytes before `61` (e.g. `a5 00`, `88 00`, `e5 00`).
-  Looks like a per-telegram checksum the BeoPlayer computes, BUT injecting with a stale/own trailer
-  was still accepted onto the bus (MLGW decoded it cleanly), so it is **not enforced for our TX** —
-  copy any plausible value or the captured one.
+  The first of these is a **per-telegram checksum = (sum of all telegram bytes) & 0xFF**, the second
+  is `00`.
+  - For the `0x06` DISPLAY_SOURCE telegram the checksum **is enforced**: a wrong/stale value is
+    silently dropped by the BS9000 (this is exactly why early "send custom text" tests with the
+    captured `a5` copied verbatim were ignored). You **must** recompute it — see `display_frame()`
+    in `bsnowplaying.py` (`cs = sum(tele) & 0xFF`).
+  - The fixed establishment frames in Seq 2 carry their own correct trailers and are replayed
+    verbatim, so no recompute is needed there.
 
 ## ML telegram layout (de-framed, as MLGW shows it)
 ```
@@ -82,19 +87,54 @@ TX  6x  83 c2 01 2c 00 7a 00 0b <plen> 00 <field#16> 00 01 01 7a 02 00 00 00 01 
 ## Sequence 3 — inbound transport keys (BS9000 → us, EP 0x81), for player control
 ```
 c2 c1 01 0a 7a 00 00 0d 02 01 7a <KEY>     COMMAND/BEO4_KEY for N.MUSIC
-  keys seen: 1e, 34 (Go/Play), 36, 75  (step/next/prev family)
 c2 c1 01 0a 7a 00 00 14 00 04              (status-ish)
 c2 c1 01 0a 7a 00 00 11 00 02
 c2 c1 01 0a a1 00 00 11 00 02              (a1 = N.RADIO source)
 ```
+A key press is a COMMAND telegram (`tg[3]==0x0a`) with payload type `0x0d` (BEO4_KEY); the key
+code is the **last byte**. Verified key codes on this BS9000 (see `KEYMAP` in `bsnowplaying.py`):
 
-## What this unlocks vs. what it doesn't
-- ✅ **Source-center app is buildable**: replay Seq 1, listen for the `6c` request, fire Seq 2, keep
-  alive → the BS9000 accepts us as the N.MUSIC source, routes the 3.5 mm audio, shows "N.MUSIC".
-  Fully replaces BeoPlayer **on Linux**. Control + audio done.
-- ❓ **Track text on the MK III glass**: BeoPlayer's full Seq 2 (incl. all 6 metadata fields with the
-  real "Over The Horizon" title) was sent, yet the glass historically shows only "N.MUSIC". So the
-  MK III does NOT render artist/title from 0x06 or 0x0b. Track text — if possible at all on this unit
-  — needs a different telegram type than BeoPlayer uses (research: MasterDataTool source, or capture a
-  real B&O CD/A.MEM source that's known to scroll text on a BS9000).
+| Key (Beo4 / front panel) | Code   | Mapped to  |
+|--------------------------|--------|------------|
+| GO                       | `0x35` | play/pause |
+| STOP                     | `0x36` | stop       |
+| STEP UP (∧)              | `0x1e` | next       |
+| STEP DOWN (V)            | `0x1f` | prev       |
+| WIND (`>>`)              | `0x34` | next       |
+| REWIND (`<<`)            | `0x32` | prev       |
+
+(Two ways to skip, by design.) The app debounces telegram repeats (~0.4 s) and writes
+`"<seq> <command>"` to `command.txt`; `player-control.ps1` injects the matching global media key.
+
+## Sequence 4 — track text & scrolling on the glass (SOLVED)
+The MK III glass **does** render arbitrary text — but not by accepting `0x0b`
+EXTENDED_SOURCE_INFORMATION, and not via late `0x06` updates with arbitrary counter values. The
+real mechanism is the `0x06` DISPLAY_SOURCE telegram plus a **timing/latch** trick:
+
+- The glass latches its displayed string from the DISPLAY_SOURCE telegram at the **moment of source
+  establishment** (right after it sends the `6c` DISTRIBUTION_REQUEST). BeoPlayer just happens to put
+  the source label `"N.MUSIC"` in that text field — which is why the stock glass only ever shows
+  `N.MUSIC`. Put the song there instead and the glass shows the song.
+- **Mid-session repaint (this is the scroll engine):** re-send the DISPLAY_SOURCE **pair** —
+  counter `01` then counter `02` — interleaved with a STATUS_INFO keepalive, and the glass repaints
+  **without** re-selecting the source. Sending a single `0x06` with an arbitrary counter does *not*
+  repaint; the alternating `01`/`02` pair is what the glass accepts as a live update.
+- **Marquee:** the display field is 12 chars and the BS9000 has no native scroll, so scrolling is
+  source-faked — shift a 12-char window across `text + "   "` one char per frame, alternating the
+  counter byte `01`/`02` each frame, ~0.2 s/frame, with STATUS_INFO fired ~40 ms before each frame.
+
+DISPLAY_SOURCE telegram (the one whose text field we own):
 ```
+83 c2 01 2c 00 7a 00 06 11 00 03 <cc> 01 00 00 <12 ASCII>   cc = 01 / 02 (alternating)
+                                                            trailer = <sum&0xFF> 00
+```
+Reference implementation: `display_frame()` + the main loop in `bsnowplaying.py`.
+
+## What this unlocks
+- ✅ **Source-center app**: replay Seq 1, listen for the `6c` request, fire Seq 2, keep alive →
+  the BS9000 accepts us as the N.MUSIC source and routes the 3.5 mm audio. Fully replaces BeoPlayer
+  **on Linux**.
+- ✅ **Track text + scrolling on the glass** via Seq 4 — arbitrary text, live marquee, no Windows /
+  BeoPlayer. (Earlier notes that the MK III "can't render artist/title" were wrong; they were sending
+  the *source label* in `0x06`, or `0x0b` which the glass ignores, or `0x06` with a stale checksum.)
+- ✅ **Player control** from the BS9000's own keys via Seq 3.
