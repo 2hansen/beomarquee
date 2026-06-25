@@ -7,8 +7,7 @@ own remote / front-panel keys**, and plays the **audio** — all without the dea
 
 It does this by driving the **BeoPort 1671** (B&O's USB↔Masterlink adapter) directly from a
 small Python program, which impersonates a Masterlink **N.MUSIC source** on the bus. The
-reverse-engineering that made this possible is written up in [`PROTOCOL.md`](PROTOCOL.md);
-the build history and design notes are in [`PLAN.md`](PLAN.md).
+reverse-engineering that made this possible is written up in [`PROTOCOL.md`](PROTOCOL.md).
 
 > **Status:** working and running hands-free on the hifi PC. Reboot → log in → a few seconds
 > later the BS9000 scrolls the current track; the remote's transport keys drive the player.
@@ -106,7 +105,6 @@ the Python program through two plain text files in this folder:
 | File | Contents |
 |------|----------|
 | [`PROTOCOL.md`](PROTOCOL.md) | The reverse-engineered BeoPort USB ↔ Masterlink protocol (framing, init handshake, telegrams, checksum, key codes). |
-| [`PLAN.md`](PLAN.md) | Goal, design decisions, and build history. |
 | [`RE-capture-recipe.md`](RE-capture-recipe.md) | How the protocol captures were taken (USBPcap), if you ever need to re-capture. |
 | [`TROUBLESHOOTING.txt`](TROUBLESHOOTING.txt) | The 2-minute "nothing lit up" checklist. |
 | B&O MLGW protocol spec | Official source-ID / checksum-convention reference. Not redistributed here — download from [mlgw.bang-olufsen.dk](https://mlgw.bang-olufsen.dk/). |

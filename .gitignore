@@ -22,3 +22,6 @@ driver-backup/
 .DS_Store
 Thumbs.db
 *.swp
+
+# Internal build plan / roadmap — kept local, not published
+PLAN.md
