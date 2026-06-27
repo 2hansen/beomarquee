@@ -25,3 +25,8 @@ Thumbs.db
 
 # Internal build plan / roadmap — kept local, not published
 PLAN.md
+
+# Runtime self-heal / control artifacts (local only)
+wedge-count
+reattach-request
+control-log.txt

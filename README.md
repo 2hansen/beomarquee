@@ -107,6 +107,7 @@ the Python program through two plain text files in this folder:
 | [`PROTOCOL.md`](PROTOCOL.md) | The reverse-engineered BeoPort USB ↔ Masterlink protocol (framing, init handshake, telegrams, checksum, key codes). |
 | [`RE-capture-recipe.md`](RE-capture-recipe.md) | How the protocol captures were taken (USBPcap), if you ever need to re-capture. |
 | [`TROUBLESHOOTING.txt`](TROUBLESHOOTING.txt) | The 2-minute "nothing lit up" checklist. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Release history. |
 | B&O MLGW protocol spec | Official source-ID / checksum-convention reference. Not redistributed here — download from [mlgw.bang-olufsen.dk](https://mlgw.bang-olufsen.dk/). |
 | `bsdisplay.py` | Standalone utility to push **arbitrary** text to the glass — handy for testing. |
 | `driver-backup/` | _(local only — gitignored)_ Exported proprietary B&O Windows BeoPort driver; only for reverting to BeoPlayer. Not redistributed. |
@@ -179,9 +180,16 @@ Get-ScheduledTask 'BeoPort Auto-Attach','BeoSound NowPlaying Writer','BeoSound P
     Select TaskName, State
 ```
 
-Tunables on `bsnowplaying.py` (and `run.sh`): `--speed <sec/frame>` (scroll speed, default 0.2),
-`--idle "<text>"` (shown when nothing is playing, default `BEOSOUND 9000`).
-Add players to the display whitelist by editing `$allow` in `nowplaying-writer.ps1`.
+Tunables on `bsnowplaying.py` (and `run.sh`): `--speed <sec/frame>` (scroll speed, default 0.3),
+`--ka <sec>` (keepalive interval, default 1.0), `--idle "<text>"` (shown when nothing is playing,
+default `BEOSOUND 9000`). Add players to the display whitelist by editing `$allow` in
+`nowplaying-writer.ps1`.
+
+> **Why two timers?** The BeoPort drops inbound remote-key telegrams when our outbound USB
+> rate is too high. The keepalive (which keeps the BeoPort forwarding keys) and the scrolling
+> display therefore run on independent timers so the total stays well under that ceiling — that
+> is what keeps the remote's transport keys reliable while the glass is scrolling. Lowering
+> `--speed` too far (faster scroll) can starve the keys again.
 
 ---
 

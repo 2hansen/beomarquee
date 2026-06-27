@@ -2,7 +2,8 @@
 # start with NO visible terminal window. Fixes the Win11 "three terminals open
 # on reboot" annoyance: -WindowStyle Hidden is ignored when Windows Terminal is
 # the default console host, so we launch through wscript.exe instead (window
-# style 0 = genuinely hidden). Triggers/settings/principal are left untouched.
+# style 0 = genuinely hidden). Triggers/settings left untouched; the principal is
+# explicitly re-applied (see below) because Set-ScheduledTask -Action would reset it.
 #
 #   powershell -ExecutionPolicy Bypass -File .\register-hidden-tasks.ps1 [-ShowWindowTitle]
 #
@@ -29,8 +30,19 @@ foreach ($name in $map.Keys) {
     if ($name -eq 'BeoSound NowPlaying Writer' -and $ShowWindowTitle) { $arg += " -ShowWindowTitle" }
     $action = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument $arg
 
+    # Set-ScheduledTask -Action ALONE silently resets the principal to default RunLevel
+    # Limited (it does NOT leave it untouched). The BeoPort Auto-Attach task must stay at
+    # RunLevel Highest so it can `usbipd bind` unattended, so capture the current RunLevel,
+    # set the action, then re-assert it via object mutation (the -Principal param did not
+    # reliably hold Highest on this build).
+    $saveRunLevel = (Get-ScheduledTask -TaskName $name -ErrorAction Stop).Principal.RunLevel
     Set-ScheduledTask -TaskName $name -Action $action | Out-Null
-    Write-Host "Updated '$name' -> wscript run-hidden.vbs $($map[$name])"
+    $t = Get-ScheduledTask -TaskName $name
+    if ($t.Principal.RunLevel -ne $saveRunLevel) {
+        $t.Principal.RunLevel = $saveRunLevel
+        $t | Set-ScheduledTask | Out-Null
+    }
+    Write-Host "Updated '$name' -> wscript run-hidden.vbs $($map[$name]) (RunLevel $((Get-ScheduledTask -TaskName $name).Principal.RunLevel))"
 }
 
 Write-Host ""

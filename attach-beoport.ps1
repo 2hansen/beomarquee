@@ -12,13 +12,35 @@ $ErrorActionPreference = 'Continue'
 $usbipd = Join-Path $env:ProgramFiles 'usbipd-win\usbipd.exe'
 if (-not (Test-Path $usbipd)) { $usbipd = (Get-Command usbipd.exe -ErrorAction Stop).Source }
 $busid = '8-2'   # BeoPort 1671 on this box (stable port); resolved by hardware id below if it moves
+$reattachReq = Join-Path $PSScriptRoot 'reattach-request'   # WSL drops this when the link wedges (Errno 110)
 
 while ($true) {
     try {
         $line = (& $usbipd list) | Where-Object { $_ -match '0cd4:0101' } | Select-Object -First 1
         if ($line) {
             if ($line -match '^\s*(\S+)\s+0cd4:0101') { $busid = $Matches[1] }
-            if ($line -notmatch 'Attached') {
+
+            # Self-heal the recurring BeoPort/usbip wedge: the WSL service hits Errno 110 on every
+            # write while the device still shows 'Attached', so a plain re-attach won't fix it --
+            # it needs a detach+reattach to re-enumerate a fresh node. WSL signals via this file.
+            if (Test-Path $reattachReq) {
+                Write-Host "[attach-beoport] reattach-request seen -> detach+reattach busid $busid to clear wedge"
+                & $usbipd detach --busid $busid
+                Start-Sleep -Seconds 2
+                & $usbipd attach --wsl Ubuntu --busid $busid
+                Remove-Item -LiteralPath $reattachReq -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 2
+            }
+            elseif ($line -notmatch 'Attached') {
+                # The usbipd bind ("Shared" state) is supposed to be persistent but does NOT
+                # reliably survive a reboot / USB-port change (busid moved 8-2 -> 8-4 once and
+                # the share was lost -> attach refuses with "Device is not shared"). Binding
+                # needs admin, which is why this task runs at RunLevel Highest -- so it can
+                # self-heal that case unattended instead of needing a manual elevated bind.
+                if ($line -match 'Not shared') {
+                    Write-Host "[attach-beoport] busid $busid is 'Not shared' -> binding ..."
+                    & $usbipd bind --busid $busid
+                }
                 Write-Host "[attach-beoport] attaching busid $busid to WSL ..."
                 & $usbipd attach --wsl Ubuntu --busid $busid    # also boots Ubuntu if it's cold
             }
