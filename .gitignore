@@ -30,3 +30,7 @@ PLAN.md
 wedge-count
 reattach-request
 control-log.txt
+
+# Local release runbook + notes (not part of the published tree)
+RELEASE-v1.1.0.md
+RELEASE-NOTES-BODY.md
