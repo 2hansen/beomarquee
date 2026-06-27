@@ -25,11 +25,6 @@ function Await($t, $ty) { ($g.MakeGenericMethod($ty).Invoke($null, @($t))).GetAw
 $MgrType  = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]
 $BoolType = [bool]
 
-# Only ever control the real music players (mirror of the now-playing writer's whitelist),
-# so a stray browser / Teams session can't be driven by the remote.
-$allow = @('Spotify', 'foobar2000', 'MusicBee')
-function Is-Allowed($id) { if (-not $id) { return $false }; foreach ($a in $allow) { if ($id -match $a) { return $true } }; return $false }
-
 $script:mgr = $null
 function Get-Mgr {
     if ($script:mgr) { return $script:mgr }
@@ -41,20 +36,14 @@ function Get-Mgr {
 # compare the name — robust against the numeric enum (Playing is actually 5, NOT 4).
 function Is-Playing($s) { try { return "$($s.GetPlaybackInfo().PlaybackStatus)" -eq 'Playing' } catch { return $false } }
 
-# Pick the session the remote should drive: a whitelisted Playing session first; else any
-# Playing session; else a whitelisted current session; else the current session (so a
-# play/resume from a paused OR stopped state still targets the last-active player).
+# Drive the session Windows considers current — exactly where the OS routes the keyboard
+# media keys. No whitelist / no custom preference: the remote behaves like pressing
+# play/pause on the keyboard (just lock-proof, via SMTC instead of synthetic keys).
 function Get-Target {
     $m = Get-Mgr
     if (-not $m) { return $null }
-    try {
-        $sessions = @($m.GetSessions())
-        foreach ($s in $sessions) { if ((Is-Allowed $s.SourceAppUserModelId) -and (Is-Playing $s)) { return $s } }
-        foreach ($s in $sessions) { if (Is-Playing $s) { return $s } }
-        $cur = $m.GetCurrentSession()
-        if ($cur -and (Is-Allowed $cur.SourceAppUserModelId)) { return $cur }
-        return $cur
-    } catch { $script:mgr = $null; return $null }   # drop a stale manager so it re-requests next time
+    try { return $m.GetCurrentSession() }
+    catch { $script:mgr = $null; return $null }   # drop a stale manager so it re-requests next time
 }
 
 function Do-Cmd($cmd) {
