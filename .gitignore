@@ -30,6 +30,9 @@ PLAN.md
 wedge-count
 reattach-request
 control-log.txt
+attach-beoport.log
+cleanup-watchers.ps1
+cleanup.log
 
 # Local release runbook + notes (not part of the published tree)
 RELEASE-v1.1.0.md
