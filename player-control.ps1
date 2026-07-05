@@ -32,10 +32,6 @@ function Get-Mgr {
     return $script:mgr
 }
 
-# PlaybackStatus renders by NAME in PowerShell ('Playing' / 'Paused' / 'Stopped' / ...), so
-# compare the name — robust against the numeric enum (Playing is actually 5, NOT 4).
-function Is-Playing($s) { try { return "$($s.GetPlaybackInfo().PlaybackStatus)" -eq 'Playing' } catch { return $false } }
-
 # Drive the session Windows considers current — exactly where the OS routes the keyboard
 # media keys. No whitelist / no custom preference: the remote behaves like pressing
 # play/pause on the keyboard (just lock-proof, via SMTC instead of synthetic keys).
@@ -50,11 +46,17 @@ function Do-Cmd($cmd) {
     $s = Get-Target
     if (-not $s) { return }
     switch ($cmd) {
-        # GO = explicit play/pause by status, NOT TryTogglePlayPause: toggle won't reliably
-        # resume from a STOPPED state, so GO couldn't restart playback after a stop. Pause
-        # only when actually playing; otherwise Play (resumes from paused AND stopped).
-        'playpause' { if (Is-Playing $s) { Await ($s.TryPauseAsync()) $BoolType | Out-Null } else { Await ($s.TryPlayAsync()) $BoolType | Out-Null } }
-        'stop'      { Await ($s.TryStopAsync())            $BoolType | Out-Null }
+        # GO = TryTogglePlayPause, which flips the player's REAL state. We do NOT decide by
+        # PlaybackStatus: Spotify's SMTC status is stale (it reads 'Playing' even after a
+        # confirmed pause), so a status-based branch always chose Pause and GO could never
+        # resume. Toggle is handled by the player itself, so it resumes from pause reliably.
+        # (We only ever pause now -- never hard-stop -- so the resume-from-STOPPED concern
+        # that once motivated a status branch no longer applies.)
+        'playpause' { Await ($s.TryTogglePlayPauseAsync()) $BoolType | Out-Null }
+        # STOP key = PAUSE (resumable), not a hard TryStopAsync: a true SMTC Stop unloads the
+        # current media, so GO afterwards can't resume (only skip-to-next revived it). Pause
+        # keeps the track loaded so GO resumes it. The Beo4 has no separate pause key.
+        'stop'      { Await ($s.TryPauseAsync())           $BoolType | Out-Null }
         'next'      { Await ($s.TrySkipNextAsync())        $BoolType | Out-Null }
         'prev'      { Await ($s.TrySkipPreviousAsync())    $BoolType | Out-Null }
     }
