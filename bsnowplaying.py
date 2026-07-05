@@ -13,7 +13,9 @@ Run (hifi box, BeoPort attached to WSL, dev node writable, MusicBee running):
 Then select N.MUSIC on the Beosound (within 20s) if it isn't already active. Ctrl-C to stop.
 
 Options:
-  --speed 0.4   seconds per scroll-text frame (default 0.4 = B&O factory cadence ~2.5 Hz)
+  --speed 0.6   seconds per DISPLAY FRAME (default 0.6). The BS9000 latches the glass only on a
+                complete 01->02 pair, so text advances one char every 2 frames (~1.2 s/char at
+                0.6) = true single-char scroll. Lower = smoother but more bus echo (starves keys).
   --ka 1.0      seconds between keepalive frames (default 1.0); required to keep the
                 BeoPort forwarding inbound remote keys -- see note below
   --idle "..."  text shown when nothing is playing (default "BEOSOUND 9000")
@@ -275,7 +277,7 @@ def main():
     # (~10 tele/sec starved keys; ~5/sec is reliable). So keepalive and scroll run on INDEPENDENT
     # timers: STATUS_FRAME (keepalive -- required or the BeoPort stops forwarding keys) every `ka`s,
     # and the scrolling display_frame every `speed`s. Defaults keep total well under the safe ceiling.
-    args = sys.argv[1:]; speed = 0.4; ka = 1.0; idle = "BEOSOUND 9000"; i = 0
+    args = sys.argv[1:]; speed = 0.6; ka = 1.0; idle = "BEOSOUND 9000"; i = 0
     no_display = False
     while i < len(args):
         if args[i] == "--speed": speed = float(args[i+1]); i += 2
@@ -312,9 +314,9 @@ def main():
 
     reader = InboundReader(dev); reader.start()    # take over EP_IN now that init reads are done
 
-    print(f"now-playing -> Beosound glass. Ctrl-C to stop.\n(idle text: {idle!r}, scroll {speed}s/frame, keepalive {ka}s)")
+    print(f"now-playing -> Beosound glass. Ctrl-C to stop.\n(idle text: {idle!r}, scroll {speed}s/frame ~{2*speed:.1f}s/char, keepalive {ka}s)")
     shown = None       # current marquee string
-    s = ""; idx = 0; cc = 1
+    s = ""; idx = 0; cc = 0
     last_print = ""
     skips = 0          # consecutive display-write failures -> detect a mid-run link wedge
     TICK = 0.05        # loop granularity; the two timers below decide what actually gets sent
@@ -330,17 +332,21 @@ def main():
                 # that gap makes the track scroll IN from the right on a change. <=12 chars = static.
                 s = (track + " " * 12) if len(track) > 12 else track
                 idx = len(track) if len(track) > 12 else 0
+                cc = 0                          # restart the 01->02 display pair for the new track
                 if track != last_print:
                     print("  ♪", track); last_print = track
             try:
                 sent_ka = False
                 if now - last_ka >= ka:                        # keepalive tick: keeps the BeoPort forwarding inbound keys
                     w(dev, STATUS_FRAME); last_ka = now; sent_ka = True
-                if not no_display and now - last_scroll >= speed:   # scroll tick: advance the marquee one step
+                if not no_display and now - last_scroll >= speed:   # scroll tick: emit one display frame
                     if sent_ka: time.sleep(0.04)               # brief gap when a keepalive just went out
                     view = (s + s)[idx % len(s): idx % len(s) + 12] if len(s) > 12 else s
-                    w(dev, display_frame(view, (cc % 2) + 1))
-                    idx += 1; cc += 1; last_scroll = now
+                    counter = (cc % 2) + 1                     # 1 then 2; the BS9000 commits the glass
+                    w(dev, display_frame(view, counter))       # only on a complete 01->02 pair
+                    cc += 1; last_scroll = now
+                    if counter == 2:                           # pair done -> advance ONE char, so the SAME
+                        idx += 1                               # view goes out on both halves = true 1-char step
                 skips = 0
             except usb.core.USBError as e:         # transient blip -> skip this frame, keep running
                 skips += 1
