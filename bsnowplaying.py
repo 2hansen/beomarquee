@@ -13,7 +13,7 @@ Run (hifi box, BeoPort attached to WSL, dev node writable, MusicBee running):
 Then select N.MUSIC on the Beosound (within 20s) if it isn't already active. Ctrl-C to stop.
 
 Options:
-  --speed 0.3   seconds per scroll-text frame (default 0.3)
+  --speed 0.4   seconds per scroll-text frame (default 0.4 = B&O factory cadence ~2.5 Hz)
   --ka 1.0      seconds between keepalive frames (default 1.0); required to keep the
                 BeoPort forwarding inbound remote keys -- see note below
   --idle "..."  text shown when nothing is playing (default "BEOSOUND 9000")
@@ -275,7 +275,7 @@ def main():
     # (~10 tele/sec starved keys; ~5/sec is reliable). So keepalive and scroll run on INDEPENDENT
     # timers: STATUS_FRAME (keepalive -- required or the BeoPort stops forwarding keys) every `ka`s,
     # and the scrolling display_frame every `speed`s. Defaults keep total well under the safe ceiling.
-    args = sys.argv[1:]; speed = 0.3; ka = 1.0; idle = "BEOSOUND 9000"; i = 0
+    args = sys.argv[1:]; speed = 0.4; ka = 1.0; idle = "BEOSOUND 9000"; i = 0
     no_display = False
     while i < len(args):
         if args[i] == "--speed": speed = float(args[i+1]); i += 2
@@ -325,8 +325,11 @@ def main():
             track = poller.text or idle
             if track != shown:                 # track changed -> reset scroll
                 shown = track
-                s = (track + "   ") if len(track) > 12 else track
-                idx = 0
+                # Long text scrolls with a full 12-space gap so it clears the 12-char glass
+                # completely before the next loop (no head-slams-into-tail); starting idx in
+                # that gap makes the track scroll IN from the right on a change. <=12 chars = static.
+                s = (track + " " * 12) if len(track) > 12 else track
+                idx = len(track) if len(track) > 12 else 0
                 if track != last_print:
                     print("  ♪", track); last_print = track
             try:
