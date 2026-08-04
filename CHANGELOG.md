@@ -4,15 +4,50 @@ All notable changes to **beomarquee** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.1] — 2026-06-27
+## [1.1.2] — 2026-08-04
+
+### Added
+- **Full accented-character support on the glass.** Danish `Æ Ø Å`, the umlaut/diaeresis vowels
+  `Ä Ë Ï Ö Ü`, `Œ`, `ß` and `Ñ` now show as their real letters instead of `?`. The Beosound's
+  display has a custom character ROM — its glyphs sit at non-standard byte positions, so the
+  correct bytes are now sent per character. Characters with no ROM glyph degrade gracefully —
+  accents stripped to the base letter (`café→CAFE`), typographic dashes/quotes normalised, and
+  anything still unmappable (emoji, CJK, odd symbols) shown as a blank rather than a stray `?`
+  (a `?` you actually typed still shows). New `--enc`, `--rawhex` and `--sweep` options are
+  included for probing a display's character ROM.
+- **Survives sleep/suspend.** A Windows resume-from-sleep task now rebuilds the BeoPort
+  link automatically whenever the machine wakes. Sleeping the machine severs the
+  USB-over-IP link between Windows and WSL mid-transfer, which used to deadlock the reader
+  and leave the glass dark until a manual restart. The link is now torn down and rebuilt on
+  every wake, with no intervention.
 
 ### Changed
-- **Remote transport now mirrors the keyboard media keys exactly.** Dropped the player
+- **Resume recovery is surgical — it no longer restarts the whole WSL environment.** When
+  it rebuilds the link after sleep it tears down just the USB port from inside WSL (a root
+  `vhci` sysfs detach) instead of shutting down the entire WSL VM, so anything else running
+  in that WSL keeps running. It falls back to the full `wsl --shutdown` only if the targeted
+  teardown fails, so recovery is no less reliable than before.
+- **Remote transport mirrors the keyboard media keys exactly.** Dropped the player
   whitelist and the custom session-preference ladder from the remote relay; it now drives
   the session Windows considers current — the same session the OS routes a keyboard
-  play/pause key to. Standard OS behavior instead of a hardcoded gate: predictable, and one
-  less thing to maintain. (The now-playing *glass* keeps its whitelist — that's a custom
-  display choice with no OS equivalent to defer to.) The GO-from-stopped resume is kept.
+  play/pause key to. Standard OS behavior instead of a hardcoded gate. (The now-playing
+  *glass* keeps its whitelist — that's a custom display choice with no OS equivalent to
+  defer to.)
+- **True single-character scroll.** The marquee now advances exactly one character per
+  display refresh instead of appearing to hop two — the glass only latches on a complete
+  frame pair, so the text steps once per pair. Tracks clear fully and scroll in from the
+  right, at a factory-like cadence. Default scroll speed is now 0.5 s/frame.
+
+### Fixed
+- **GO reliably resumes playback.** The player's media-status field can report "playing"
+  for a few seconds after a real pause, so the old status-based GO always took the pause
+  branch and could never resume. GO now toggles the player's actual play/pause state; STOP
+  pauses (keeping the track loaded) rather than a hard stop that unloads the media so
+  nothing can resume it.
+- **A hung usbipd can't freeze the auto-attach loop.** Every `usbipd` call is wrapped in a
+  hard timeout — a call that hangs (seen right after a wake while Windows is still settling)
+  is killed and retried on the next tick instead of stalling the whole attach loop. Attach
+  activity is logged to a self-trimming file.
 
 ## [1.1.0] — 2026-06-27
 
@@ -70,6 +105,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hands-free autostart: logon scheduled tasks + a WSL systemd service bring the whole
   chain up after a reboot.
 
-[1.1.1]: https://github.com/2hansen/beomarquee/releases/tag/v1.1.1
+[1.1.2]: https://github.com/2hansen/beomarquee/releases/tag/v1.1.2
 [1.1.0]: https://github.com/2hansen/beomarquee/releases/tag/v1.1.0
 [1.0.0]: https://github.com/2hansen/beomarquee/releases/tag/v1.0.0

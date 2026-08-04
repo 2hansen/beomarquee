@@ -13,9 +13,9 @@ Run (hifi box, BeoPort attached to WSL, dev node writable, MusicBee running):
 Then select N.MUSIC on the Beosound (within 20s) if it isn't already active. Ctrl-C to stop.
 
 Options:
-  --speed 0.6   seconds per DISPLAY FRAME (default 0.6). The BS9000 latches the glass only on a
-                complete 01->02 pair, so text advances one char every 2 frames (~1.2 s/char at
-                0.6) = true single-char scroll. Lower = smoother but more bus echo (starves keys).
+  --speed 0.5   seconds per DISPLAY FRAME (default 0.5). The BS9000 latches the glass only on a
+                complete 01->02 pair, so text advances one char every 2 frames (~1.0 s/char at
+                0.5) = true single-char scroll. Lower = smoother but more bus echo (starves keys).
   --ka 1.0      seconds between keepalive frames (default 1.0); required to keep the
                 BeoPort forwarding inbound remote keys -- see note below
   --idle "..."  text shown when nothing is playing (default "BEOSOUND 9000")
@@ -25,7 +25,7 @@ Bus-load note: the BeoPort drops inbound remote-key telegrams when our OUTBOUND 
 too high (~10 frames/sec starved keys; ~5/sec is reliable). Keepalive and scroll therefore
 run on independent timers so the total stays well under that ceiling while keys stay reliable.
 """
-import sys, os, time, threading, subprocess, base64
+import sys, os, time, threading, subprocess, base64, unicodedata
 import usb.core, usb.util
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -83,9 +83,58 @@ RESPONSE_PREFIX = [
 ]
 STATUS_FRAME = bytes.fromhex("602ce083c20114007a00871f047a0100001fbe01000000ff0201000301010103000200000000010000000000e50061")
 
+# Display charset. FULLY MAPPED 2026-08-04 by sweeping the glass (the CD-name picker confirmed
+# the ROM owns these glyphs): it is NOT any standard code page -- it's a CUSTOM B&O ROM (that's
+# why Latin-1 and CP865/CP850 all blanked). Plain ASCII 0x20-0x5E renders normally (and a-z
+# fold to A-Z); the accented letters live at custom bytes in the 0xD0/0xE0 rows -> _GLYPH below.
+# Per char: use the ROM byte if we mapped it; else plain ASCII; else transliterate (AE/OE/...).
+ENC = "ascii"   # kept as a probing override hook (--enc); the real mapping is _GLYPH below
+
+_TRANSLIT = str.maketrans({
+    "Æ": "AE", "æ": "ae", "Ø": "OE", "ø": "oe", "Å": "AA", "å": "aa",
+    # ß/Ñ now have real ROM glyphs (see _GLYPH, bytes 8D/8A) -> these expansions remain only as
+    # a fallback if the glyph map is ever stripped:
+    "ß": "SS", "ẞ": "SS", "Ñ": "N", "ñ": "n",
+    "Ð": "D",  "ð": "d",  "Þ": "TH", "þ": "th",
+    # common typographic punctuation the ASCII glass can't show (else -> "?")
+    "–": "-", "—": "-", "―": "-", "‒": "-",
+    "‘": "'", "’": "'", "‚": "'", "“": '"', "”": '"', "„": '"',
+    "…": "...", " ": " ", "​": "",
+})
+
+def _translit(text):
+    text = text.translate(_TRANSLIT)                                    # Danish/ligatures -> ASCII
+    text = unicodedata.normalize("NFKD", text)                          # split accents off base letters
+    return "".join(c for c in text if not unicodedata.combining(c))     # drop the combining accents
+
+# char -> BeoSound glass ROM byte, mapped live by sweeping the display 2026-08-04 (full 00-FF
+# pass; see glass-charset.md). Both cases share a byte (the glass folds a-z to A-Z).
+_GLYPH = {
+    "Æ": 0xE2, "æ": 0xE2, "Ø": 0xE7, "ø": 0xE7, "Å": 0xE1, "å": 0xE1,   # Danish
+    "Ä": 0xD1, "ä": 0xD1, "Ë": 0xD3, "ë": 0xD3, "Ï": 0xD5, "ï": 0xD5,   # diaeresis vowels
+    "Ö": 0xD7, "ö": 0xD7, "Ü": 0xD9, "ü": 0xD9, "Œ": 0xE3, "œ": 0xE3,
+    "ß": 0x8D, "ẞ": 0x8D, "Ñ": 0x8A, "ñ": 0x8A,                         # found on the full sweep
+}
+
+def _to_glass(text):
+    out = bytearray()
+    for ch in text:
+        if ch in _GLYPH:
+            out.append(_GLYPH[ch])                                      # native B&O glyph byte
+            continue
+        try:
+            out += ch.encode(ENC)                                       # plain ASCII (or --enc codec)
+        except UnicodeEncodeError:
+            ascii_ = _translit(ch).encode("ascii", "ignore")            # transliterate; drop what won't map
+            out += ascii_ or b" "                                       # nothing mappable -> blank space (not "?")
+    return bytes(out)
+
+RAW = None     # --rawhex sends literal bytes, bypassing all encoding (for charset probing)
+SWEEP = None   # --sweep (lo, hi, dwell): step through byte values to map the ROM's glyphs
+
 def display_frame(text, cc=0x01):
     tele = bytes.fromhex("83c2012c007a000611000300")[:11] + bytes([cc, 0x01, 0x00, 0x00])
-    t = text.encode("ascii", "replace")[:12]; t = t + b" " * (12 - len(t))
+    t = (RAW if RAW is not None else _to_glass(text))[:12]; t = t + b" " * (12 - len(t))
     tele = tele + t
     cs = sum(tele) & 0xFF
     payload = b"\xe0" + tele + bytes([cs, 0x00])
@@ -277,12 +326,17 @@ def main():
     # (~10 tele/sec starved keys; ~5/sec is reliable). So keepalive and scroll run on INDEPENDENT
     # timers: STATUS_FRAME (keepalive -- required or the BeoPort stops forwarding keys) every `ka`s,
     # and the scrolling display_frame every `speed`s. Defaults keep total well under the safe ceiling.
-    args = sys.argv[1:]; speed = 0.6; ka = 1.0; idle = "BEOSOUND 9000"; i = 0
+    global ENC, RAW, SWEEP
+    args = sys.argv[1:]; speed = 0.5; ka = 1.0; idle = "BEOSOUND 9000"; i = 0
     no_display = False
     while i < len(args):
         if args[i] == "--speed": speed = float(args[i+1]); i += 2
         elif args[i] == "--ka": ka = float(args[i+1]); i += 2          # keepalive interval (s)
         elif args[i] == "--idle": idle = args[i+1]; i += 2
+        elif args[i] == "--enc": ENC = args[i+1]; i += 2               # display charset (default ascii; try cp865/cp850 for ÆØÅ)
+        elif args[i] == "--rawhex": RAW = bytes.fromhex(args[i+1].replace(" ", "")); i += 2   # probe: send literal bytes
+        elif args[i] == "--sweep":                                     # probe: step byte lo..hi, DWELL s each ("80 FF 2")
+            _p = args[i+1].split(); SWEEP = (int(_p[0], 16), int(_p[1], 16), float(_p[2]) if len(_p) > 2 else 2.0); i += 2
         elif args[i] == "--no-display": no_display = True; i += 1       # diagnostic: keepalive only, no scrolling text
         else: i += 1
 
@@ -321,9 +375,16 @@ def main():
     skips = 0          # consecutive display-write failures -> detect a mid-run link wedge
     TICK = 0.05        # loop granularity; the two timers below decide what actually gets sent
     last_ka = 0.0; last_scroll = 0.0       # 0.0 -> both fire on the first iteration
+    sweep_t0 = time.time(); sweep_last = -1     # --sweep charset-probe state
     try:
         while True:
             now = time.time()
+            if SWEEP is not None:                          # charset probe: show "HH " then byte 0xHH's glyph x9
+                lo, hi, dwell = SWEEP
+                b = lo + (int((now - sweep_t0) / dwell) % (hi - lo + 1))
+                RAW = f"{b:02X} ".encode("ascii") + bytes([b]) * 9
+                if b != sweep_last:
+                    print(f"  sweep -> byte 0x{b:02X}", flush=True); sweep_last = b
             track = poller.text or idle
             if track != shown:                 # track changed -> reset scroll
                 shown = track
