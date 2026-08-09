@@ -46,8 +46,14 @@ $fellBack = $false
 try {
     $healWsl = (& $wsl -d Ubuntu -e wslpath -a "$healScript" 2>$null | Select-Object -First 1)
     if ([string]::IsNullOrWhiteSpace($healWsl)) { throw "wslpath returned nothing for '$healScript'" }
-    & $wsl -d Ubuntu -u root -e bash "$healWsl"
+    # Capture the heal script's own log lines (stdout+stderr) into this log -- without them
+    # an exit code alone says nothing about WHY a heal did or did not act.
+    $healOut = & $wsl -d Ubuntu -u root -e bash "$healWsl" 2>&1
     $rc = $LASTEXITCODE
+    foreach ($healLine in @($healOut)) {
+        $t = "$healLine".Trim()
+        if ($t) { Log "    | $t" }
+    }
     Log "[resume-rebuild] resume-heal.sh exit $rc"
     if ($rc -ne 0) {
         Log "[resume-rebuild] surgical heal failed (rc=$rc) -> FALLBACK wsl --shutdown"

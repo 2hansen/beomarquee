@@ -4,6 +4,18 @@ All notable changes to **beomarquee** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **A wake with WSL not running no longer restarts the whole WSL environment for nothing.**
+  If WSL is not running when the machine wakes, there is no USB link to repair — the targeted
+  teardown now reports that as "nothing to do" instead of as a failure, so the fallback full
+  `wsl --shutdown` is skipped. It still runs whenever the teardown genuinely cannot act.
+
+### Changed
+- **Resume recovery logs why it did what it did.** The teardown step's own messages are now
+  written to `resume-rebuild.log` alongside its exit code.
+
 ## [1.1.2] — 2026-08-04
 
 ### Added

@@ -14,14 +14,27 @@
 #   and all other processes survive. The existing reattach-request -> attach-beoport
 #   loop then re-attaches a fresh node and bsnowplaying rebinds, exactly as before.
 #
-# Exit codes: 0 = healed (or nothing attached); 2 = could not act (not root / no vhci)
+# Exit codes: 0 = healed, or nothing to heal (no attached port / no vhci in this VM)
+#             2 = could NOT act (vhci is there but we are not root)
 #             -> resume-rebuild.ps1 falls back to `wsl --shutdown` on non-zero.
 set -u
 VHCI=/sys/devices/platform/vhci_hcd.0
 log(){ echo "$(date '+%F %T') [resume-heal] $*"; }
 
+# No vhci at all => usbip has never attached inside THIS VM, so there is no wedged URB to
+# reap and nothing for `wsl --shutdown` to clear either. Happens when the VM was not running
+# at wake time (this very call cold-boots it). Seen live 2026-08-09: heal hit a fresh VM,
+# exited 2, and the caller nuked a VM that had nothing wrong with it. Report success instead
+# -- the reattach-request the caller writes afterwards is all that is needed.
+if [ ! -e "$VHCI/detach" ]; then
+    log "no $VHCI -- usbip never attached in this VM (nothing wedged); no fallback needed"
+    exit 0
+fi
+
+# Present but not writable => we are not root. That IS a real failure: a wedged URB may be
+# sitting there and we cannot reap it, so the caller must fall back to the whole-VM hammer.
 if [ ! -w "$VHCI/detach" ]; then
-    log "no writable $VHCI/detach (not root, or no vhci) -- aborting; caller should fall back to wsl --shutdown"
+    log "$VHCI/detach not writable (not running as root) -- aborting; caller should fall back to wsl --shutdown"
     exit 2
 fi
 
