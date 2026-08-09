@@ -39,6 +39,12 @@ COMMAND_TXT = os.path.join(HERE, "command.txt")        # WE write here on a BS90
 # to call usbipd.exe itself). So we signal it via a file the attach-beoport.ps1 loop watches. ---
 REATTACH_REQ = os.path.join(HERE, "reattach-request")  # WE touch this when wedged; attach-beoport.ps1 power-cycles the link
 WEDGE_COUNT  = os.path.join(HERE, "wedge-count")        # consecutive init-wedge counter across service restarts
+# --- source state, for power-watch.ps1's sleep guard. We only put the Beosound into standby
+# when the PC sleeps if IT IS PLAYING US -- never yank a unit the user left on CD or the radio.
+# Only this process can know that (it's the one reading the bus), so it publishes the answer
+# to a file the Windows watcher reads. Same file-bridge pattern as command.txt. ---
+SOURCE_STATE = os.path.join(HERE, "source-state")       # "n.music" (we own the source) | "other"
+SRC_NMUSIC   = 0x7a                                     # Masterlink source byte for N.MUSIC
 
 def _read_wedge_count():
     try: return int((open(WEDGE_COUNT).read().strip() or "0"))
@@ -219,7 +225,13 @@ def wait_request(dev, seconds):
             d = bytes(dev.read(EP_IN, 64, timeout=120))
             if d and set(d) != {0xFF}:
                 buf += d
-                if "6c0a01" in buf.hex(): return True
+                if "6c0a01" in buf.hex():
+                    # Same DISTRIBUTION request _scan_inbound recognises, but this init-time
+                    # scan is a raw substring match that never reaches the parser -- so publish
+                    # the source state here too, or a select that happens during startup is
+                    # invisible to the sleep guard until the next one.
+                    _set_source_state("n.music")
+                    return True
         except usb.core.USBError: pass
     return False
 
@@ -227,6 +239,23 @@ def wait_request(dev, seconds):
 # Received telegram frame = 60 <len> 00 <ML telegram> 61. A key press is a COMMAND
 # telegram: tg[3]==0x0a, payload type 0x0d (BEO4_KEY); key code is the last byte.
 _inbuf = b""
+
+_source_state = None
+
+def _set_source_state(state):
+    """Publish "is the Beosound listening to US?" for power-watch.ps1. Writes only on change."""
+    global _source_state
+    if state == _source_state:
+        return
+    _source_state = state
+    try:
+        tmp = SOURCE_STATE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(state)
+        os.replace(tmp, SOURCE_STATE)                      # atomic, like command.txt
+        print("  ⊙ source -> %s" % state, flush=True)
+    except Exception as e:
+        print("  ! source-state write failed:", e, flush=True)
 
 def _scan_inbound(buf):
     cmds = []; dist = False
@@ -242,8 +271,16 @@ def _scan_inbound(buf):
                 tg = payload[1:]
                 if tg[3] == 0x0a and tg[7] == 0x0d:         # COMMAND / BEO4_KEY -> transport key
                     cmds.append(tg)
+                    if tg[4] == SRC_NMUSIC:                 # key arrived in an N.MUSIC context ->
+                        _set_source_state("n.music")        # corroborates that we own the source
                 elif tg[3] == 0x0b and tg[7] == 0x6c:       # REQUEST / DISTRIBUTION -> N.MUSIC selected
                     dist = True
+                    _set_source_state("n.music")            # the clean positive signal
+                elif tg[3] == 0x0a and tg[7] in (0x11, 0x14) and tg[4] != SRC_NMUSIC:
+                    # Source-status for a source that is NOT us -> the user moved to CD/radio, or
+                    # the unit went to standby (captured 2026-08-09: standby ends with a src-a1
+                    # telegram). Either way we no longer own it, so the sleep guard must not fire.
+                    _set_source_state("other")
         else:
             buf = buf[i + 1:]                               # misaligned 0x60 -> skip
     if len(buf) > 256: buf = buf[-256:]                     # bound the buffer

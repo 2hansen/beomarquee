@@ -82,6 +82,7 @@ the Python program through two plain text files in this folder:
 | **`attach-beoport.ps1`** | Loops forever: whenever the BeoPort (`0cd4:0101`) is present but not attached to WSL, runs `usbipd attach --wsl`. That call also **boots the WSL distro if it's cold**, which starts systemd and the display service. | One task brings up the whole chain after login. (Replaces the flaky built-in `--auto-attach`.) |
 | **`nowplaying-writer.ps1`** | Runs in the Windows interactive session (where Windows SMTC is visible), every ~1.5 s writes the current `Artist - Title` to `nowplaying.txt`. **Whitelisted to Spotify + foobar2000 only** so Teams/browsers/video calls never hijack the glass. | The systemd service can't read SMTC itself; this is the "now playing" half of the file bridge. |
 | **`player-control.ps1`** | Runs in the Windows interactive session, watches `command.txt`, and injects the matching **global media key** (play/pause, stop, next, prev). | The systemd service can't press keys; this is the "remote control" half of the file bridge. Spotify/foobar2000 obey system media keys. |
+| **`power-watch.ps1`** | Watches for sleep/wake. On **sleep**, if the Beosound is playing *this PC*, puts it in **standby**; on **wake**, if *it* was the one that did so, selects **N.MUSIC** again. Optional — needs `ha.env`. | Turning the stereo off by hand every time you shut the lid gets old. Drives the unit through **Home Assistant's MLGW integration**, not the bus: sending a Beo4 key ourselves was tested against a known-good key and is silently ignored, so the outbound telegram format is still unsolved. An HTTP call also can't lose the race against the USB link dying as Windows suspends. |
 | **`run-hidden.vbs`** | A `wscript` shim that launches a PowerShell script with a **genuinely hidden** window, then waits. Used by all three scheduled tasks. | Windows 11 **ignores `-WindowStyle Hidden`** when Windows Terminal is the default console host — this shim is the reliable fix for "terminal windows pop open on every reboot". |
 
 ### Setup / registration (run once, or to update)
@@ -91,6 +92,7 @@ the Python program through two plain text files in this folder:
 | **`register-beoport-task.ps1`** | Creates the **`BeoPort Auto-Attach`** logon scheduled task. |
 | **`register-nowplaying-writer.ps1`** | Creates the **`BeoSound NowPlaying Writer`** logon scheduled task. |
 | **`register-player-control.ps1`** | Creates the **`BeoSound Player Control`** logon scheduled task. |
+| **`register-power-watch.ps1`** | Creates the **`BeoSound Power Watch`** logon scheduled task (sleep → standby, wake → N.MUSIC). Optional; needs `ha.env` (copy `ha.env.example`). |
 | **`register-hidden-tasks.ps1`** | **Re-points all three tasks** to launch via `run-hidden.vbs` (windowless). ⚠️ The three `register-*` scripts above still create the tasks with a *visible* PowerShell action — so **always run `register-hidden-tasks.ps1` last**, and re-run it any time you re-register a task. |
 
 ### Runtime data (auto-generated — leave them, don't edit)
@@ -99,6 +101,8 @@ the Python program through two plain text files in this folder:
 |------|----------|
 | `nowplaying.txt` | Current `Artist - Title` (refreshed ~1.5 s). |
 | `command.txt`    | Last transport command + a sequence number. |
+| `source-state`   | `n.music` or `other` — whether the Beosound is currently listening to this PC. Read by `power-watch.ps1` so it never switches off a unit that's playing something else. |
+| `standby-flag`   | Present only while `power-watch.ps1` is the reason the Beosound is in standby, so waking restores only what it turned off. |
 
 ### Reference & docs
 

@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **The Beosound sleeps and wakes with the PC.** Put the machine to sleep and the Beosound goes
+  to standby; wake it and the Beosound comes back on N.MUSIC, ready to play. Both directions are
+  guarded so it only ever undoes its own work: it switches the unit off **only if the unit was
+  playing this PC** — a Beosound on CD or the radio is left alone — and switches it back on
+  **only if it was the one that switched it off**, so a unit you deliberately left off stays off.
+  Waking selects the source without starting playback; you press play. Optional and off by
+  default: it needs Home Assistant with the Masterlink Gateway integration (copy `ha.env.example`
+  to `ha.env`, then run `register-power-watch.ps1`).
+
 ### Fixed
 - **A wake with WSL not running no longer restarts the whole WSL environment for nothing.**
   If WSL is not running when the machine wakes, there is no USB link to repair — the targeted

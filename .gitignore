@@ -32,6 +32,12 @@ reattach-request
 control-log.txt
 attach-beoport.log
 resume-rebuild.log
+source-state
+standby-flag
+power-watch.log
+
+# Home Assistant credentials for power-watch.ps1 (long-lived token -- never commit)
+ha.env
 cleanup-watchers.ps1
 cleanup.log
 
