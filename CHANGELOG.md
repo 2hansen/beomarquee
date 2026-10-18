@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Waking selects the source without starting playback; you press play. Optional and off by
   default: it needs Home Assistant with the Masterlink Gateway integration (copy `ha.env.example`
   to `ha.env`, then run `register-power-watch.ps1`).
+- **iTunes for Windows on the glass and the remote.** Classic iTunes doesn't report to the
+  Windows media controls, so it is now read and driven through its own COM scripting interface:
+  the glass shows the iTunes track while it plays, and the Beo4 transport keys drive whichever
+  player — iTunes or an SMTC player like Spotify — most recently started playing. Only used
+  while iTunes is already running (it is never launched by the scripts).
 
 ### Fixed
 - **A wake with WSL not running no longer restarts the whole WSL environment for nothing.**
@@ -25,6 +30,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Resume recovery logs why it did what it did.** The teardown step's own messages are now
   written to `resume-rebuild.log` alongside its exit code.
+
+### Fixed
+- **Worked around, then dropped, a WSL kernel regression that had blocked every USB attach.**
+  Starting with WSL kernel `6.18.40.1` (first seen 2026-09-11), usbipd-win's internal
+  `mount -t drvfs` call (against `C:\Program Files\usbipd-win\WSL`) failed with `mount() failed:
+  Operation not supported`, so every `usbipd attach` errored with "Mounting ... within WSL
+  failed" — the BeoPort never showed up in WSL at all, independent of the app, the device, or any
+  prior sleep/wedge issue. Root cause was a WSL-side drvfs regression, tracked upstream at
+  microsoft/WSL#41475, fixed in microsoft/WSL#41487. Workaround at the time:
+  `install-usbipd-mount-workaround.sh`, installing a systemd unit that bind-mounted the same
+  folder into place at boot so usbipd's own broken mount step was skipped. **2026-09-11, same
+  day: upgraded to WSL 2.9.11 (preview) and confirmed the native `usbipd attach` now succeeds
+  on its own — the workaround service was disabled, its unit file removed, and
+  `install-usbipd-mount-workaround.sh` deleted from the repo.** See
+  `TROUBLESHOOTING.txt` for history; keep an eye out in case a future WSL update regresses this
+  differently.
 
 ## [1.1.2] — 2026-08-04
 

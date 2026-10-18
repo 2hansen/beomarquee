@@ -9,7 +9,8 @@
 #                    the switch (or re-register the task with it) to enable the ambient display.
 param([switch]$ShowWindowTitle)
 $ErrorActionPreference = 'SilentlyContinue'
-$out = Join-Path $PSScriptRoot 'nowplaying.txt'
+# $out = Join-Path $PSScriptRoot 'nowplaying.txt'
+$out = "C:\BeoSound\nowplaying.txt"
 
 Add-Type -AssemblyName System.Runtime.WindowsRuntime | Out-Null
 $g = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
@@ -22,8 +23,30 @@ function Await($t, $ty) { ($g.MakeGenericMethod($ty).Invoke($null, @($t))).GetAw
 # browsers, video calls, etc. publish SMTC too — the whitelist keeps that media junk off the
 # display. When NONE of them is playing AND -ShowWindowTitle was passed, the glass falls back
 # to the active window title (Get-Foreground below) — so SMTC music always wins over it.
-$allow = @('Spotify', 'foobar2000')
+$allow = @('Spotify', 'foobar2000', 'iTunes', 'PowerShell', 'WindowsTerminal', 'spotatui')
 function Allowed($id) { foreach ($a in $allow) { if ($id -like "*$a*") { return $true } } return $false }
+
+# Classic iTunes for Windows does NOT publish SMTC (it grabs the keyboard media keys itself),
+# so it is read/driven via its COM scripting interface instead. Guarded on iTunes.exe running
+# (New-Object would otherwise LAUNCH iTunes), and every reference is released immediately —
+# a held COM reference makes iTunes nag "applications are using the scripting interface" on quit.
+function Use-ITunes([scriptblock]$f) {
+    if (-not (Get-Process iTunes -ErrorAction SilentlyContinue)) { return $null }
+    $it = $null
+    try { $it = New-Object -ComObject iTunes.Application; return (& $f $it) }
+    catch { return $null }
+    finally { if ($it) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($it) } }
+}
+
+function Get-ITunesTrack {   # "Artist - Title" while iTunes is PLAYING (PlayerState 1), else $null
+    Use-ITunes {
+        param($it)
+        if ($it.PlayerState -ne 1) { return $null }
+        $t = $it.CurrentTrack
+        try { if ($t.Artist) { "$($t.Artist) - $($t.Name)" } else { "$($t.Name)" } }
+        finally { if ($t) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($t) } }
+    }
+}
 
 function Get-NowPlaying {
     $result = $null
@@ -33,6 +56,10 @@ function Get-NowPlaying {
             $playing = $null
             foreach ($s in $mgr.GetSessions()) {                       # prefer a whitelisted player that is Playing
                 if ((Allowed $s.SourceAppUserModelId) -and $s.GetPlaybackInfo().PlaybackStatus -eq 4) { $playing = $s; break }
+            }
+            if (-not $playing) {                                       # a PLAYING iTunes beats a paused SMTC session
+                $it = Get-ITunesTrack
+                if ($it) { return $it }
             }
             if (-not $playing) {                                       # else the current session, but only if whitelisted
                 $c = $mgr.GetCurrentSession()
