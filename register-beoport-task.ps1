@@ -18,7 +18,7 @@ if (-not (Test-Path $script)) { throw "attach-beoport.ps1 not found next to this
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
     -Argument "-NoProfile -NoLogo -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`""
 
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User ([Security.Principal.WindowsIdentity]::GetCurrent().Name)
 
 # No time limit (the monitor blocks forever); auto-restart if it ever exits.
 $settings = New-ScheduledTaskSettingsSet `
@@ -26,7 +26,7 @@ $settings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit ([TimeSpan]::Zero) `
     -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
 
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
+$principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Highest
 
 Register-ScheduledTask -TaskName 'BeoPort Auto-Attach' `
     -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
@@ -35,8 +35,13 @@ Register-ScheduledTask -TaskName 'BeoPort Auto-Attach' `
 # LogonType Interactive) does NOT reliably persist on this build (PS7/Win11) -- it stores
 # back as Limited. Force it via object mutation, which DOES stick. Without Highest the task
 # can't `usbipd bind` unattended when the share is lost after a reboot.
+# Only needed when it didn't stick; on Windows PowerShell 5.1 the round-trip itself can fail
+# with HRESULT 0x80041318, so skip it when Highest already persisted and never abort on it.
 $t = Get-ScheduledTask -TaskName 'BeoPort Auto-Attach'
-$t.Principal.RunLevel = 'Highest'
-$t | Set-ScheduledTask | Out-Null
+if ($t.Principal.RunLevel -ne 'Highest') {
+    $t.Principal.RunLevel = 'Highest'
+    try { $t | Set-ScheduledTask | Out-Null }
+    catch { Write-Warning "Could not force RunLevel Highest: $($_.Exception.Message)" }
+}
 
 Write-Host ("Registered 'BeoPort Auto-Attach' (RunLevel {0}). Test now:  Start-ScheduledTask -TaskName 'BeoPort Auto-Attach'" -f (Get-ScheduledTask -TaskName 'BeoPort Auto-Attach').Principal.RunLevel)

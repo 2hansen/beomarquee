@@ -30,7 +30,8 @@ import usb.core, usb.util
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 NOWPLAYING_PS1 = os.path.join(HERE, "nowplaying2.ps1")
-NOWPLAYING_TXT = os.path.join(HERE, "nowplaying.txt")  # written by nowplaying-writer.ps1 (Windows interactive session)
+#NOWPLAYING_TXT = os.path.join(HERE, "nowplaying.txt")  # written by nowplaying-writer.ps1 (Windows interactive session)
+NOWPLAYING_TXT = "/mnt/c/BeoSound/nowplaying.txt"  # written by nowplaying-writer.ps1 (Windows interactive session)
 NP_STALE_SEC = 10                                      # ignore the file if the writer stopped refreshing it
 COMMAND_TXT = os.path.join(HERE, "command.txt")        # WE write here on a BS9000 key; player-control.ps1 injects the media key
 # --- USB-link self-heal: the BeoPort/usbip link periodically wedges (writes return Errno 110

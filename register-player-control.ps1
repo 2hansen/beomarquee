@@ -11,14 +11,14 @@ if (-not (Test-Path $script)) { throw "player-control.ps1 not found next to this
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
     -Argument "-NoProfile -NoLogo -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`""
 
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User ([Security.Principal.WindowsIdentity]::GetCurrent().Name)
 
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -ExecutionTimeLimit ([TimeSpan]::Zero) `
     -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
 
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+$principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
 
 Register-ScheduledTask -TaskName 'BeoSound Player Control' `
     -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force

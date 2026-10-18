@@ -24,7 +24,7 @@ if (Test-Path $vbs) {
         -Argument "-NoProfile -NoLogo -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`""
 }
 
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User ([Security.Principal.WindowsIdentity]::GetCurrent().Name)
 
 # No time limit (the watcher blocks forever); auto-restart if it ever exits. DontStopIfGoingOnBatteries
 # matters here more than anywhere else -- this task's whole job happens as the machine powers down.
@@ -33,7 +33,7 @@ $settings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit ([TimeSpan]::Zero) `
     -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
 
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive
+$principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive
 
 Register-ScheduledTask -TaskName 'BeoSound Power Watch' `
     -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null

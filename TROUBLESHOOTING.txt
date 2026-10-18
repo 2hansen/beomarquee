@@ -3,6 +3,14 @@ If something doesn't light up, check in this order
   # Windows: did the BeoPort get attached to WSL?
   ! "/mnt/c/Program Files/usbipd-win/usbipd.exe" list      # want STATE = Attached
 
+  # If attach fails with "usbipd: error: Mounting 'C:\Program Files\usbipd-win\WSL'
+  # within WSL failed" -- that's a WSL-kernel-side drvfs regression (first seen on
+  # kernel 6.18.40.1, tracked at microsoft/WSL#41475). Fixed upstream in WSL 2.9.11+
+  # (microsoft/WSL#41487) -- run `wsl --update --pre-release` and re-test. Only if
+  # you're stuck on an older WSL: `install-usbipd-mount-workaround.sh` is the old
+  # band-aid, removed from this box on 2026-09-11 once 2.9.11 confirmed fixed it.
+  # See CHANGELOG [Unreleased] > Fixed for the full story.
+
   # WSL: is the service up and what does it see?
   ! journalctl -u bsnowplaying -n 30 --no-pager            # look for ♪ track / ↻ re-armed / ⏯ key
   Paste me whichever looks off and I'll zero in.

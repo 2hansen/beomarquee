@@ -35,7 +35,7 @@ $settings = New-ScheduledTaskSettingsSet `
 
 # Interactive: on resume-from-sleep the console session is still logged on, so the task runs.
 # wsl --shutdown needs no elevation, so RunLevel Limited (default) is fine.
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive
+$principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive
 
 Register-ScheduledTask -TaskName 'BeoSound Resume Rebuild' `
     -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
