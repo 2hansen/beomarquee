@@ -18,14 +18,15 @@ Options:
                 0.5) = true single-char scroll. Lower = smoother but more bus echo (starves keys).
   --ka 1.0      seconds between keepalive frames (default 1.0); required to keep the
                 BeoPort forwarding inbound remote keys -- see note below
-  --idle "..."  text shown when nothing is playing (default "BEOSOUND 9000")
+  --idle "..."  text shown when nothing is playing
+                (default "BEOSOUND 9000 CONNECTED TO <PC NAME>", PC name = host name, upper-cased)
   --no-display  diagnostic: send keepalive only, no scrolling text
 
 Bus-load note: the BeoPort drops inbound remote-key telegrams when our OUTBOUND rate is
 too high (~10 frames/sec starved keys; ~5/sec is reliable). Keepalive and scroll therefore
 run on independent timers so the total stays well under that ceiling while keys stay reliable.
 """
-import sys, os, time, threading, subprocess, base64, unicodedata
+import sys, os, time, threading, subprocess, base64, unicodedata, socket
 import usb.core, usb.util
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -365,7 +366,7 @@ def main():
     # timers: STATUS_FRAME (keepalive -- required or the BeoPort stops forwarding keys) every `ka`s,
     # and the scrolling display_frame every `speed`s. Defaults keep total well under the safe ceiling.
     global ENC, RAW, SWEEP
-    args = sys.argv[1:]; speed = 0.5; ka = 1.0; idle = "BEOSOUND 9000"; i = 0
+    args = sys.argv[1:]; speed = 0.5; ka = 1.0; idle = None; i = 0
     no_display = False
     while i < len(args):
         if args[i] == "--speed": speed = float(args[i+1]); i += 2
@@ -377,6 +378,9 @@ def main():
             _p = args[i+1].split(); SWEEP = (int(_p[0], 16), int(_p[1], 16), float(_p[2]) if len(_p) > 2 else 2.0); i += 2
         elif args[i] == "--no-display": no_display = True; i += 1       # diagnostic: keepalive only, no scrolling text
         else: i += 1
+    if idle is None:                                   # default idle text names the PC driving the glass
+        host = (socket.gethostname() or "").split(".")[0].upper()
+        idle = f"BEOSOUND 9000 CONNECTED TO {host}" if host else "BEOSOUND 9000"
 
     poller = Poller(); poller.start()
     dev = open_dev()

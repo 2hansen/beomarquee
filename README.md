@@ -186,7 +186,7 @@ Get-ScheduledTask 'BeoPort Auto-Attach','BeoSound NowPlaying Writer','BeoSound P
 
 Tunables on `bsnowplaying.py` (and `run.sh`): `--speed <sec/frame>` (scroll speed, default 0.3),
 `--ka <sec>` (keepalive interval, default 1.0), `--idle "<text>"` (shown when nothing is playing,
-default `BEOSOUND 9000`). Add players to the display whitelist by editing `$allow` in
+default `BEOSOUND 9000 CONNECTED TO <PC NAME>`, using the machine's host name). Add players to the display whitelist by editing `$allow` in
 `nowplaying-writer.ps1`.
 
 > **Why two timers?** The BeoPort drops inbound remote-key telegrams when our outbound USB

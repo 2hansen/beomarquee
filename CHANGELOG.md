@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **The idle glass names the PC.** With nothing playing, the display now scrolls
+  `BEOSOUND 9000 CONNECTED TO <PC NAME>` (the machine's host name) instead of just
+  `BEOSOUND 9000`, so you can see which computer is driving the Beosound. `--idle "..."` still
+  overrides it.
 - **The Beosound sleeps and wakes with the PC.** Put the machine to sleep and the Beosound goes
   to standby; wake it and the Beosound comes back on N.MUSIC, ready to play. Both directions are
   guarded so it only ever undoes its own work: it switches the unit off **only if the unit was

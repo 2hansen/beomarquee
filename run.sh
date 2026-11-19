@@ -2,7 +2,7 @@
 # Manual launcher for bsnowplaying.py — shows MusicBee's current track on the
 # Beosound 9000 glass. Resolves its own dir so it works from any cwd.
 #
-#   ./run.sh                 # defaults: --speed 0.2 --idle "BO HIFI"
+#   ./run.sh                 # bsnowplaying.py defaults (idle = "BEOSOUND 9000 CONNECTED TO <PC NAME>")
 #   ./run.sh --speed 0.15    # any bsnowplaying.py flags are passed through
 #
 # Preconditions: BeoPort (0CD4:0101) attached to WSL via usbipd + dev node
