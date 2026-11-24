@@ -3,6 +3,12 @@ nowplaying.txt
 command.txt
 switch.txt
 *.pid
+# Per-machine variants of the bridge files (e.g. command-DESKTOP-xxx.txt)
+nowplaying-*.txt
+command-*.txt
+switch-*.txt
+# usbipd attach script logs (one per machine/run; contain hostnames)
+attach-beoport-*.log
 
 # Python
 __pycache__/
